@@ -6,15 +6,6 @@ import shutil, requests
 import webbrowser
 import vk_api
 from vk_api.audio import VkAudio
-from telethon import TelegramClient
-from telethon.errors import SessionPasswordNeededError
-from telethon.tl.functions.channels import CreateChannelRequest, EditPhotoRequest
-from telethon.tl.functions.messages import SendMediaRequest, DeleteMessagesRequest, GetDialogsRequest
-from telethon.tl.types import (
-  DocumentAttributeAudio, DocumentAttributeFilename,
-  Channel, InputMediaUploadedDocument, InputChannel,
-  InputChatUploadedPhoto
-)
 
 def captcha_handler(captcha):
   url = captcha.get_url()
@@ -53,46 +44,11 @@ def scrap_data(html):
     })
   return tracks
 
-def reporthook(count, block_size, total_size):
-  global start_time
-  if count == 0:
-    start_time = time.time()
-    return
-  duration = time.time() - start_time
-  progress_size = int(count * block_size)
-  if duration != 0: speed = int(progress_size / (1024 * duration))
-  else: speed = 1
-  percent = min(int(count * block_size * 100 / total_size), 100)
-  sys.stdout.write("\r%d%%, %d MB, %d KB/s" % (percent, progress_size / (1024 * 1024), speed))
-  sys.stdout.flush()
-
 def save(url, filename):
   response = requests.get(url, stream=True)
   with open(filename, 'wb') as out_file:
     shutil.copyfileobj(response.raw, out_file)
   del response
-
-def send_file(client, entity, file, dur, title, artist, caption):
-  file_hash = hash(file)
-  if file_hash in client._upload_cache: file_handle = client._upload_cache[file_hash]
-  else: client._upload_cache[file_hash] = file_handle = client.upload_file(file)
-  attr_dict = {
-    DocumentAttributeFilename:
-    DocumentAttributeFilename(caption),
-    DocumentAttributeAudio:
-    DocumentAttributeAudio(int(dur), title=title, performer=artist)
-  }
-  media = InputMediaUploadedDocument(
-    file=file_handle,
-    mime_type='audio/mpeg',
-    attributes=list(attr_dict.values()),
-    caption=''
-  )
-  client(SendMediaRequest(
-    peer=client.get_input_entity(entity),
-    media=media,
-    reply_to_msg_id=None
-  ))
 
 def auth_vk():
   print('First, log in to vk.com')
@@ -118,40 +74,12 @@ def auth_vk():
   if not os.path.exists(folderName + str(user_id)): os.mkdir(folderName + str(user_id))
   return VkAudio(vk_session), user_id
 
-def auth_tg():
-  client = TelegramClient('MusicSaver', 184825, '7fd2ade01360bdd6cbc1de0f0120092c')
-  client.connect()
-  print('\nNow, log in to telegram')
-  if not client.is_user_authorized():
-    try:
-      client.sign_in(phone=input('Enter full phone number: '))
-      client.sign_in(code=input('Enter code that you received: '))
-    except SessionPasswordNeededError:
-      client.sign_in(password=input('Two step verification is enabled. Please enter your password: '))
-  return client
-
 def main():
   store_local = input('Do you want to leave the local files? [N/y] ') in ['y', 'yes']
   folderName = 'Music '
 
   vkaudio, user_id = auth_vk()
-  client = auth_tg()
-
-  VKMusicChannel = None
   progress = 0
-  _, entities = client.get_dialogs(limit=100)
-  for e in entities:
-    if type(e) == Channel and e.title == 'VKMusic': VKMusicChannel = e
-
-  if VKMusicChannel is None:
-    VKMusicChannel = client(CreateChannelRequest(title='VKMusic', about='made with https://github.com/HaCk3Dq/vktotg')).chats[0]
-    client(EditPhotoRequest(
-      InputChannel(VKMusicChannel.id, VKMusicChannel.access_hash), InputChatUploadedPhoto(client.upload_file('music.jpg'))
-    ))
-    client.delete_messages(client.get_entity(VKMusicChannel), 2)
-  else:
-    progress = client.get_message_history(VKMusicChannel)[0]
-    print('\nFound ' + str(progress) + ' tracks, continue downloading...')
 
   offset = 0
   audios = []
@@ -184,23 +112,8 @@ def main():
         print('Failed to save track after 2 tries [' + str(i+1) + '/' + str(total) + ']')
         exit()
 
-    print('\nUploading...')
-    sys.stdout.flush()
-    try:
-      send_file(
-        client, client.get_entity(VKMusicChannel),
-        file_path,
-        track['dur'], track['title'],
-        track['artist'], filename
-      )
-    except:
-      print('Failed to send track ' + str(i) + ', try again')
-      exit()
-
     if not store_local: os.remove(file_path)
     print()
     sys.stdout.flush()
-
-  client.disconnect()
 
 if __name__ == '__main__': main()

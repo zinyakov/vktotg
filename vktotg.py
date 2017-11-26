@@ -75,7 +75,6 @@ def auth_vk():
   return VkAudio(vk_session), user_id
 
 def main():
-  store_local = input('Do you want to leave the local files? [N/y] ') in ['y', 'yes']
   folderName = 'Music '
 
   vkaudio, user_id = auth_vk()
@@ -112,7 +111,6 @@ def main():
         print('Failed to save track after 2 tries [' + str(i+1) + '/' + str(total) + ']')
         exit()
 
-    if not store_local: os.remove(file_path)
     print()
     sys.stdout.flush()
 

@@ -5,6 +5,9 @@ import collections, os, sys, time, ssl
 import shutil, requests
 import webbrowser
 import vk_api
+import re
+import discogsClientHelper
+import time
 from vk_api.audio import VkAudio
 
 def captcha_handler(captcha):
@@ -54,8 +57,8 @@ def auth_vk():
   print('First, log in to vk.com')
   folderName = 'Music '
   vk_session = vk_api.VkApi(
-    input('Enter login: '),
-    input('Enter password: '),
+    'ringsheep@gmail.com',
+    'IANCURTISIANCURTIS',
     captcha_handler=captcha_handler,
     auth_handler=auth_handler
   )
@@ -75,7 +78,9 @@ def auth_vk():
   return VkAudio(vk_session), user_id
 
 def main():
-  folderName = 'Music '
+  discogsHelper = discogsClientHelper.Helper()
+  discogsHelper.authorize()
+  folderName = 'parsed'
 
   vkaudio, user_id = auth_vk()
   progress = 0
@@ -96,7 +101,36 @@ def main():
     if progress and i < progress-1: continue
     filename = track['artist'] + ' - ' + track['title']
     escaped_filename = filename.replace("/","_")
-    file_path = folderName + str(user_id) + '/' + escaped_filename +'.mp3'
+    artist_name = re.split(" +- +", escaped_filename)[0]
+    folder_path = folderName
+    artist_path = folder_path + '/' + artist_name
+
+    if not os.path.exists(artist_path): os.mkdir(artist_path)
+
+    album_path = artist_path
+    discogs_result = discogsHelper.search(escaped_filename, artist_name, 1)
+    if len(discogs_result) > 0 :
+        discogs_release_id_separator = '|#'
+        album = discogs_result[0]
+        print('album tracks ' + str(album.tracklist))
+        for track in album.tracklist:
+            print('keys ' + str(track.__dict__.{1!r}))
+            # if track.__getitem__ == re.split(" +- +", escaped_filename)[1]:
+            #     album_name = album.title.replace("/","_") + ' ' + discogs_release_id_separator + str(album.id)
+            #     album_path = artist_path + '/' + album_name
+            #     print('This track belongs to album ' + album_path)
+    else:
+        print('This track is off-album')
+
+    if not os.path.exists(album_path): os.mkdir(album_path)
+
+    file_path = './' + album_path + '/' + escaped_filename +'.mp3'
+    if os.path.exists(file_path):
+        print('File ' + file_path + ' already exists\n')
+        continue
+    else:
+        print('File not found at path ' + file_path)
+
 
     print('Downloading [' + str(i+1) + '/' + str(total) + ']')
     try:
@@ -110,6 +144,7 @@ def main():
       except:
         print('Failed to save track after 2 tries [' + str(i+1) + '/' + str(total) + ']')
         exit()
+    time.sleep(1)
 
     print()
     sys.stdout.flush()
